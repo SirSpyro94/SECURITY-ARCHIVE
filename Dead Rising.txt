@@ -1,0 +1,33 @@
+"
+Security:
+-> Custom Checksum(s)
+  -> Offset: 16, 36, 56, ..., EOF - 4
+  -> Calculation Start: 0, 20, 40, ..., EOF - 20
+  -> Calculation Length: 16
+ 
+Additional:
+You can calculate the checksum count n with Size / 20.
+Each checksum consist of two separate Int16 checksums, that are calculated with the following formulas.
+ 
+1: x[0] + x[1] + x[2] + x[3] + x[4] + x[5] + ...
+2: x[0] - x[1] + x[2] - x[3] + x[4] - x[5] + ...
+"
+ 
+public void FixChecksums(byte[] data, int offset, int size) {
+    fixed (byte* x = data) {
+        byte* e = x + offset + size;
+               
+        ushort sumL, sumH;
+        for (byte* s = e - size; s < e; s += 4) {
+ 
+            sumL = sumH = 0;
+            for (int n = 0; n < 16; ++n, ++s) {
+                sumL += *s;
+                sumH += (ushort) ((n % 2) == 0 ? *s : -*s);
+            }
+ 
+            *(ushort*) s = sumL.Swap();
+            *(ushort*) (s + 2) = sumH.Swap();
+        }
+    }
+}

@@ -1,0 +1,19 @@
+"
+Security:
+-> Custom Checksum
+  -> Offset: Size - 4
+  -> Calculation Start: 0
+  -> Calculation Length: Size - 4
+"
+ 
+private int CalculateChecksum(byte[] data) {
+    using (var xIO = new MasterIO(data, Endian.BIG)) {
+        int count = (data.Length / 4) - 1;
+ 
+        int sum = 0x5C0999;
+        for (int i = 0; i < count; ++i)
+            sum += xIO.Reader.ReadInt32();
+ 
+        return sum;
+    }
+}

@@ -1,0 +1,11 @@
+"
+Security:
+-> Blowfish
+-> SHA1
+  -> Offset: 12
+  -> Calculation Start: 64
+  -> Calculation Length: Int32 stored at 32
+ 
+Additional:
+The blowfish key as string is 'SBmdYgEamc=#sA0)Mhs9#>/4iiXbMPxW'.
+"

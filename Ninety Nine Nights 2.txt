@@ -1,0 +1,52 @@
+"
+Security:
+-> Custom XOR Encryption
+-> Custom Checksum (2x)
+"
+ 
+private void Encrypt(byte[] data, int offset, int size) {
+    int next = 0;
+    for (int i = offset; i < (offset + size); ++i) {
+        next = ((data[i] ^ next) + (i - offset)) ^ 0xBB;
+        data[i] = (byte) next;
+    }
+}
+ 
+private void Decrypt(byte[] data, int offset, int size) {
+    int last = 0, next;
+    for (int i = offset; i < (offset + size); ++i) {
+        next = ((data[i] ^ 0xBB) - (i - offset)) ^ last;
+        last = data[i];
+        data[i] = (byte) next;
+    }
+}
+ 
+private int CalculateChecksum(byte[] data, int offset, int size) {
+    int sum = 0;
+    for (int i = offset; i < (offset + size); ++i)
+        sum += data[i] ^ (i - offset);
+ 
+    return sum;
+}
+ 
+"
+Read Save:
+"
+ 
+byte[] data = File.ReadAllBytes(fileName);
+Decrypt(data, 0x34, 0x3560);
+ 
+"
+Write Save:
+"
+ 
+byte[] data = File.ReadAllBytes(fileName);
+using (var xIO = new MasterIO(data, Endian.BIG)) {
+    xIO.Position = 20;
+    xIO.Writer.WriteInt32(CalculateChecksum(data, 0x34, 0x3560));
+    xIO.Writer.WriteInt32(0);
+ 
+    xIO.Position -= 4;
+    xIO.Writer.WriteInt32(CalculateChecksum(data, 0, 0x34));
+    Encrypt(data, 0x34, 0x3560);
+}

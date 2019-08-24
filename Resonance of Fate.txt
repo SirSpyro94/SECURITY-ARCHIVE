@@ -1,0 +1,243 @@
+"
+Security:
+-> Custom Encryption
+-> Custom Checksum
+ 
+Additional:
+Below you can see the SaveData class, which de/encrypts the main layers. It includes all the important functions and informations regarding the security. This code is not compileable, since some trivial structs and classes are missing.
+ 
+This class does not show how to edit credits and other stuff, because this would go beyond the scope of a security archive.
+"
+ 
+public class SaveData {
+    private byte[] data;
+ 
+    private uint[] mainSalts, customSalts;
+    private uint block0Salt, block1Salt;
+ 
+    private MasterIO xIO;
+    private Random random;
+    private Header header;
+ 
+    public SaveData(byte[] data, bool raw = false) {
+        if (data == null)
+            throw new ArgumentNullException("data", "RoF.SaveData: The reference to the save data is null!");
+ 
+        this.data = data;
+        this.random = new Random(data.GetHashCode());
+ 
+        Initialize(raw); // raw = decrypted data for research purpose.
+    }
+ 
+    private void Initialize(bool raw) {
+        xIO = new MasterIO(data, Endian.Big);
+ 
+        GetHeader();
+        GetNReadSalts();
+ 
+        if (!raw)
+            DecSections();
+ 
+        GetSubSalts();
+ 
+        if (!raw)
+            DecSubSections();
+    }
+ 
+    private void GetHeader() {
+        header.Mode = (Mode) xIO.Reader.ReadInt32();
+        header.Version = xIO.Reader.ReadInt32();
+        header.FileSize = xIO.Reader.ReadInt32();
+        header.MainSize = xIO.Reader.ReadInt32();
+ 
+        if (!header.IsValid())
+            throw new Exception("RoF.SaveData: Header data is invalid!");
+    }
+ 
+    private void GetNReadSalts() {
+        switch (header.Mode) {
+            case Mode.RFIR:
+                mainSalts = new uint[] { 0x1A7D154A, 0xBC35769B, 0xC41C5A4D,
+                    0x9139A8CF, 0x67569371, 0xA388D36A, 0x242BFAB6 };
+                break;
+            case Mode.RFSD:
+                mainSalts = new uint[] { 0xCF7AF41A, 0x22E3CC23, 0xDA6AF8DF,
+                    0xA904FBB9, 0x6EF2B76E, 0xC2C9F8E7, 0x1695DE99 };
+                break;
+            default:
+                throw new Exception("RoF.SaveData: Save mode is not supported!");
+        }
+ 
+        customSalts = new uint[7];
+        for (int i = 0; i < customSalts.Length; ++i)
+            customSalts[i] = xIO.Reader.ReadUInt32();
+    }
+ 
+    private void DecSections() {
+        DecSection(0x70, 64, 0, 1);
+        DecSection(0xB0, header.MainSize, 2, 3);
+ 
+        xIO.Offset = 76;
+        if (!xIO.Reader.ReadBytes(36).Compare(CalculateHash()))
+            throw new Exception("RoF.SaveData: Save data is corrupt!");
+    }
+ 
+    private void GetSubSalts() {
+        xIO.Offset = 0xC7C;
+        block0Salt = xIO.Reader.ReadUInt32();
+ 
+        xIO.Offset = 0x39CA8;
+        block1Salt = xIO.Reader.ReadUInt32();
+    }
+ 
+    private void DecSubSections() {
+        CryptBlock0(0x128, 0x100);
+        CryptBlock1(0x1C90, 0x38000);
+    }
+ 
+    private void DecSection(int offset, int size, uint salt1, uint salt2) {
+        uint next, t;
+        salt1 = customSalts[salt1] ^ mainSalts[salt1];
+        salt2 = customSalts[salt2] ^ mainSalts[salt2];
+ 
+        xIO.Offset = offset;
+        if ((size & 2) == 0) {
+            next = (salt1 + 3 * salt2 + 0x1B5F5) ^ 0xF5D6A9BA;
+            for (int i = 0; i < (size >> 1); ++i) {
+                next = (next * 0x425F5) + 0x195C3;
+                t = (next >> 14) ^ xIO.Reader.ReadUInt16();
+                xIO.Offset -= 2;
+                xIO.Writer.WriteUInt16((ushort) t);
+            }
+        }
+ 
+        for (int i = offset; i < (offset + size); ++i) {
+            salt2 = (salt2 * 0x1CDED5) + 0x4C829;
+            data[i] ^= (byte) (salt2 >> 19);
+        }
+ 
+        next = ((salt1 >> 1) & 0x7F) + 0xE;
+        for (int i = offset; i < (offset + size); ++i) {
+            salt1 = (salt1 * 0x16AB5) + 0x44BB1;
+            data[i] ^= (byte) ((salt1 >> 13) ^ next);
+            next = data[i] ^ 0x6B;
+        }
+    }
+ 
+    private void EncData() {
+        CryptBlock0(0x128, 0x100);
+        CryptBlock1(0x1C90, 0x38000);
+ 
+        xIO.Offset = 76;
+        xIO.Writer.WriteBytes(CalculateHash());
+ 
+        EncSection(0x70, 64, 0, 1);
+        EncSection(0xB0, header.MainSize, 2, 3);
+    }
+ 
+    private void EncSection(int offset, int size, uint salt1, uint salt2) {
+        uint r5, r9, next;
+        salt1 = customSalts[salt1] ^ mainSalts[salt1];
+        salt2 = customSalts[salt2] ^ mainSalts[salt2];
+ 
+        next = salt1;
+ 
+        r9 = ((salt1 >> 1) & 0x7F) + 0xE;
+        for (int i = offset; i < (offset + size); ++i) {
+            next = (next * 0x16AB5) + 0x44BB1;
+            r5 = (next >> 13) ^ r9 ^ data[i];
+            r9 = (uint) (data[i] ^ 0x6B);
+            data[i] = (byte) r5;
+        }
+ 
+        next = salt2;
+        for (int i = offset; i < (offset + size); ++i) {
+            next = (next * 0x1CDED5) + 0x4C829;
+            data[i] ^= (byte) (next >> 19);
+        }
+ 
+        xIO.Offset = offset;
+        if ((size % 2) == 0) {
+            next = (3 * salt2 + salt1 + 0x1B5F5) ^ 0xF5D6A9BA;
+            for (int i = 0; i < (size >> 1); ++i) {
+                next = (next * 0x425F5) + 0x195C3;
+                salt2 = xIO.Reader.ReadUInt16();
+                xIO.Offset -= 2;
+                xIO.Writer.WriteUInt16((ushort) ((next >> 14) ^ salt2));
+            }
+        }
+    }
+ 
+    private byte[] CalculateHash() {
+        byte[] hash = new byte[36];
+        Buffer.BlockCopy(CalculateHashPart(0, 64, 4), 0, hash, 0, 12);
+        Buffer.BlockCopy(CalculateHashPart(0x70, 64, 5), 0, hash, 12, 12);
+        Buffer.BlockCopy(CalculateHashPart(0xB0, header.MainSize, 6), 0, hash, 24, 12);
+        return hash;
+    }
+ 
+    private byte[] CalculateHashPart(int offset, int size, int salt) {
+        byte[] hash = new byte[12];
+        int sum1, sum2, sum3;
+ 
+        salt = (int) (customSalts[salt] ^ mainSalts[salt]);
+ 
+        sum1 = salt ^ 0x4DBBBA99;
+        for (int i = offset; i < (offset + size); ++i)
+            sum1 += ((i - offset) % 2 == 0) ? data[i] : 3 * data[i];
+ 
+        sum2 = sum1 + 0xDAE;
+        for (int i = offset; i < (offset + size); ++i)
+            sum2 = (sum2 * 0x1C12B) + data[i] + 0x2335F7;
+ 
+        sum3 = -1;
+        for (int i = offset; i < (offset + size); ++i) {
+            sum3 ^= data[i] << 24;
+            for (int j = 0; j < 8; ++j)
+                sum3 = (sum3 >= 0) ? (sum3 << 1) : (sum3 << 1) ^ salt;
+        }
+ 
+        using (var xIO = new MasterIO(hash, Endian.Big)) {
+            xIO.Writer.WriteInt32(sum1 ^ 0x220F57E3);
+            xIO.Writer.WriteInt32(sum2 ^ ~0x7400E28);
+            xIO.Writer.WriteInt32(sum3 ^ 0x68A4DC10);
+            return hash;
+        }
+    }
+ 
+    private void CryptBlock0(int offset, int size) {
+        uint next = block0Salt;
+        for (int i = offset; i < (offset + size); ++i) {
+            next = (next * 0xE33BB) + 0x41897;
+            data[i] ^= (byte) (next >> 20);
+        }
+    }
+ 
+    private void CryptBlock1(int offset, int size) {
+        uint next = block1Salt;
+        for (int i = offset; i < (offset + size); ++i) {
+            next = (next * 0x386B67) + 0xED051E;
+            data[i] ^= (byte) (next >> 17);
+        }
+    }
+ 
+    public byte[] Write() {
+        xIO.Offset = 16;
+        for (int i = 0; i < customSalts.Length; ++i)
+            xIO.Writer.WriteUInt32(customSalts[i] ^= (uint) random.Next(-2147483648, 2147483647));
+ 
+        EncData();
+        byte[] res = (byte[]) data.Clone();
+ 
+        DecSections();
+        DecSubSections();
+ 
+        return res;
+ 
+    }
+ 
+    public void Close() {
+        xIO.Close();
+    }
+ 
+}

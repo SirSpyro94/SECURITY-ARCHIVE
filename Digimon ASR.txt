@@ -1,0 +1,19 @@
+"
+Security:
+-> Checksum32 (Signed)
+  -> Offset: 20
+  -> Calculation Start: 0
+  -> Calculation Length: 0x185E
+ 
+Additional:
+Before the checksum is calculated, the last checksum is overwritten with 0.
+"
+ 
+private int CalculateSignedChecksum32(byte[] data, int offset, int size) {
+    int sum = 0;
+ 
+    while (size-- > 0)
+        sum += (sbyte) data[offset++];
+ 
+    return sum;
+}

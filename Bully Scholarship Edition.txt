@@ -1,0 +1,21 @@
+"
+Security:
+-> ELF Hash (Variant)
+   -> Offset: 0
+   -> Calculation Start: 4
+   -> Calculation Length: Size - 4
+"
+
+private int CalculateELF(byte[] data, int offset, int size) {
+    int t, sum = 0;
+
+    for (offset += size; size > 0; --size) {
+        sum = data[--offset] + (sum << 4);
+        t = sum & 0xF000000;
+
+        if (t != 0)
+            sum ^= (t ^ (t >> 24));
+    }
+
+    return sum;
+}

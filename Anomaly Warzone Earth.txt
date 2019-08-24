@@ -1,0 +1,13 @@
+Security:
+-> Custom CRC-32
+   -> Offset: 12
+   -> Calculation Start: 16
+   -> Calculation Length: Stored before the CRC-32
+
+Additional:
+Each TitleSpecifc has it's own CRC-32.
+
+Polynomial: 0x04C11DB7
+Initial Value: 0
+Reflection: None
+XOR Out: 0

@@ -1,0 +1,21 @@
+"
+Security:
+-> Custom Checksum
+  -> Offset: 12
+  -> Calculation Start: 16
+  -> Calculation Length: Size - 16
+ 
+Additional:
+LEGO Hobbit and newer use the same checksum, but store it at 16 and the calculation start is 20.
+"
+ 
+private int CalculateChecksum(byte[] data, int offset, int size) {
+    int sum = -1;
+ 
+    for (int i = 0; i < size; ++i) {
+        sum *= 0x1000193;
+        sum ^= data[offset++];
+    }
+ 
+    return ~sum;
+}
