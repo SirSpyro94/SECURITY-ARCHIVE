@@ -1,0 +1,5 @@
+Security:
+-> CRC-32
+   -> Offset: 0x0
+   -> Calculation Start: 0x4
+   -> Calculation Length: 0x20EB17
